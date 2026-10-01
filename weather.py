@@ -11,9 +11,14 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     except Exception:
         pass
 
-# 서울 위도 및 경도 좌표
-SEOUL_LAT = 37.5665
-SEOUL_LON = 126.9780
+# 5개 주요 도시 정보 (번호, 도시명, 위도, 경도)
+CITIES = {
+    1: {"name": "서울", "lat": 37.5665, "lon": 126.9780},
+    2: {"name": "부산", "lat": 35.1796, "lon": 129.0756},
+    3: {"name": "대구", "lat": 35.8714, "lon": 128.6014},
+    4: {"name": "인천", "lat": 37.4563, "lon": 126.7052},
+    5: {"name": "광주", "lat": 35.1595, "lon": 126.8526},
+}
 
 # WMO 날씨 코드 매핑 (기상 상태 설명)
 WMO_WEATHER_CODES = {
@@ -48,10 +53,34 @@ WMO_WEATHER_CODES = {
 }
 
 
-def get_seoul_weather():
+def get_weather(city_choice="서울"):
     """
-    실행한 날(오늘)과 다음날의 서울 기준 9시, 15시, 21시 날씨를 조회합니다.
+    선택한 도시의 오늘과 다음날 9시, 15시, 21시 날씨를 조회합니다.
+
+    :param city_choice: 번호(int/str 1~5) 또는 도시명("서울", "부산" 등)
     """
+    # 입력값을 기반으로 도시 좌표 찾기
+    selected_city = None
+    if isinstance(city_choice, int) and city_choice in CITIES:
+        selected_city = CITIES[city_choice]
+    elif isinstance(city_choice, str):
+        if city_choice.isdigit() and int(city_choice) in CITIES:
+            selected_city = CITIES[int(city_choice)]
+        else:
+            for info in CITIES.values():
+                if info["name"] == city_choice:
+                    selected_city = info
+                    break
+
+    if not selected_city:
+        raise ValueError(
+            f"유효하지 않은 도시입니다: {city_choice}. (가능한 도시: {[c['name'] for c in CITIES.values()]})"
+        )
+
+    city_name = selected_city["name"]
+    lat = selected_city["lat"]
+    lon = selected_city["lon"]
+
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -59,8 +88,8 @@ def get_seoul_weather():
     # Open-Meteo API 요청 URL 구성 (forecast_days=2로 오늘과 다음날 데이터 요청)
     base_url = "https://api.open-meteo.com/v1/forecast"
     params = {
-        "latitude": SEOUL_LAT,
-        "longitude": SEOUL_LON,
+        "latitude": lat,
+        "longitude": lon,
         "hourly": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m",
         "wind_speed_unit": "ms",
         "timezone": "Asia/Seoul",
@@ -96,7 +125,7 @@ def get_seoul_weather():
     }
 
     result = {
-        "location": "서울",
+        "location": city_name,
         "days": {},
     }
 
@@ -127,7 +156,7 @@ def get_seoul_weather():
 
 def display_weather(weather_data):
     """조회된 날씨 정보를 콘솔에 보기 쉽게 출력합니다."""
-    print("=" * 45)
+    print("\n" + "=" * 45)
     print(f"[날씨 예보] 위치: {weather_data['location']}")
     print("=" * 45)
 
@@ -148,6 +177,21 @@ def display_weather(weather_data):
     print("\n" + "=" * 45)
 
 
+def select_city():
+    """사용자로부터 5개 주요 도시 중 하나를 선택받습니다."""
+    print("=" * 45)
+    print("날씨를 조회할 도시를 선택하세요:")
+    for num, info in CITIES.items():
+        print(f"  {num}. {info['name']}")
+    print("=" * 45)
+
+    user_input = input("번호를 입력하세요 (1-5, 엔터 입력 시 서울): ").strip()
+    if not user_input:
+        return "서울"
+    return user_input
+
+
 if __name__ == "__main__":
-    weather_info = get_seoul_weather()
+    choice = select_city()
+    weather_info = get_weather(choice)
     display_weather(weather_info)
