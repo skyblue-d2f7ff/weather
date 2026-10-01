@@ -54,11 +54,12 @@ WMO_WEATHER_CODES = {
 }
 
 
-def get_weather(city_choice="서울"):
+def get_weather(city_choice="서울", days=1):
     """
-    선택한 도시의 오늘과 다음날 9시, 15시, 21시 날씨를 조회합니다.
+    선택한 도시의 지정된 기간(일 수) 동안 매일 9시, 15시, 21시 날씨를 조회합니다.
 
     :param city_choice: 번호(int/str 1~5) 또는 도시명("서울", "부산" 등)
+    :param days: 조회할 일 수 (int, 기본값: 1, 1 입력 시 오늘 하루치)
     """
     selected_city = None
     if isinstance(city_choice, int) and city_choice in CITIES:
@@ -81,11 +82,10 @@ def get_weather(city_choice="서울"):
     lat = selected_city["lat"]
     lon = selected_city["lon"]
 
-    now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    # 최소 1일 ~ 최대 14일 제한
+    days = max(1, min(int(days), 14))
 
-    # Open-Meteo API 요청 URL 구성 (forecast_days=2로 오늘과 다음날 데이터 요청)
+    # Open-Meteo API 요청 URL 구성
     base_url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
@@ -93,7 +93,7 @@ def get_weather(city_choice="서울"):
         "hourly": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m",
         "wind_speed_unit": "ms",
         "timezone": "Asia/Seoul",
-        "forecast_days": 2,
+        "forecast_days": days,
     }
     url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
@@ -104,28 +104,30 @@ def get_weather(city_choice="서울"):
     hourly = data["hourly"]
     times = hourly["time"]
 
-    # 조회 대상: 오늘과 다음날의 9시, 15시, 21시
-    targets = {
-        "오늘": {
-            "date": today,
+    # 조회 대상 날짜 및 시간대(9시, 15시, 21시) 구성
+    now = datetime.now()
+    targets = {}
+    for i in range(days):
+        day_date = (now + timedelta(days=i)).strftime("%Y-%m-%d")
+        if i == 0:
+            label = "오늘"
+        elif i == 1:
+            label = "내일"
+        else:
+            label = f"{i+1}일차 ({i}일 후)"
+
+        targets[label] = {
+            "date": day_date,
             "slots": {
-                "09시": f"{today}T09:00",
-                "15시": f"{today}T15:00",
-                "21시": f"{today}T21:00",
+                "09시": f"{day_date}T09:00",
+                "15시": f"{day_date}T15:00",
+                "21시": f"{day_date}T21:00",
             },
-        },
-        "다음날": {
-            "date": tomorrow,
-            "slots": {
-                "09시": f"{tomorrow}T09:00",
-                "15시": f"{tomorrow}T15:00",
-                "21시": f"{tomorrow}T21:00",
-            },
-        },
-    }
+        }
 
     result = {
         "location": city_name,
+        "days_count": days,
         "days": {},
     }
 
@@ -158,7 +160,7 @@ def format_weather_text(weather_data):
     """조회된 날씨 정보를 포맷팅된 문자열로 생성합니다."""
     lines = []
     lines.append("=" * 45)
-    lines.append(f"[날씨 예보] 위치: {weather_data['location']}")
+    lines.append(f"[날씨 예보] 위치: {weather_data['location']} (총 {weather_data['days_count']}일간)")
     lines.append("=" * 45)
 
     for day_label, day_data in weather_data["days"].items():
@@ -190,7 +192,8 @@ def save_weather_to_file(weather_data, filename=None):
     """
     if not filename:
         clean_date = weather_data["days"]["오늘"]["date"].replace("-", "")
-        filename = f"weather_{weather_data['location']}_{clean_date}.txt"
+        days_cnt = weather_data["days_count"]
+        filename = f"weather_{weather_data['location']}_{clean_date}_{days_cnt}일간.txt"
 
     content = format_weather_text(weather_data) + "\n"
     with open(filename, "w", encoding="utf-8") as f:
@@ -213,6 +216,22 @@ def select_city():
     return user_input
 
 
+def select_days():
+    """사용자로부터 조회할 기간(일 수)을 입력받습니다."""
+    user_input = input("조회할 기간(일 수)을 입력하세요 (예: 1=오늘 하루치, 3=3일치 / 기본값: 1): ").strip()
+    if not user_input:
+        return 1
+    if user_input.isdigit():
+        val = int(user_input)
+        if 1 <= val <= 14:
+            return val
+        elif val > 14:
+            print("최대 14일까지 조회 가능하여 14일로 설정합니다.")
+            return 14
+    print("입력값이 올바르지 않아 기본값 1일(오늘 하루치)로 진행합니다.")
+    return 1
+
+
 def ask_and_save(weather_data):
     """
     사용자에게 저장 여부를 묻고, 동의 시 파일로 저장합니다.
@@ -228,7 +247,8 @@ def ask_and_save(weather_data):
 
 
 if __name__ == "__main__":
-    choice = select_city()
-    weather_info = get_weather(choice)
+    city_choice = select_city()
+    days_choice = select_days()
+    weather_info = get_weather(city_choice, days_choice)
     display_weather(weather_info)
     ask_and_save(weather_info)
