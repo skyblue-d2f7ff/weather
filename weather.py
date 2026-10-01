@@ -1,4 +1,5 @@
 import sys
+import os
 import urllib.request
 import urllib.parse
 import json
@@ -59,7 +60,6 @@ def get_weather(city_choice="서울"):
 
     :param city_choice: 번호(int/str 1~5) 또는 도시명("서울", "부산" 등)
     """
-    # 입력값을 기반으로 도시 좌표 찾기
     selected_city = None
     if isinstance(city_choice, int) and city_choice in CITIES:
         selected_city = CITIES[city_choice]
@@ -154,27 +154,49 @@ def get_weather(city_choice="서울"):
     return result
 
 
-def display_weather(weather_data):
-    """조회된 날씨 정보를 콘솔에 보기 쉽게 출력합니다."""
-    print("\n" + "=" * 45)
-    print(f"[날씨 예보] 위치: {weather_data['location']}")
-    print("=" * 45)
+def format_weather_text(weather_data):
+    """조회된 날씨 정보를 포맷팅된 문자열로 생성합니다."""
+    lines = []
+    lines.append("=" * 45)
+    lines.append(f"[날씨 예보] 위치: {weather_data['location']}")
+    lines.append("=" * 45)
 
     for day_label, day_data in weather_data["days"].items():
-        print(f"\n▶ {day_label} ({day_data['date']})")
-        print("-" * 35)
+        lines.append(f"\n▶ {day_label} ({day_data['date']})")
+        lines.append("-" * 35)
 
         for slot_label, info in day_data["forecasts"].items():
             if info:
-                print(f"  [{slot_label}] ({info['time'].split(' ')[1]})")
-                print(f"    - 날씨 상태: {info['weather']}")
-                print(f"    - 기온: {info['temperature']} (체감: {info['apparent_temperature']})")
-                print(f"    - 습도: {info['humidity']}")
-                print(f"    - 강수확률: {info['precipitation_probability']}")
-                print(f"    - 풍속: {info['wind_speed']}")
+                lines.append(f"  [{slot_label}] ({info['time'].split(' ')[1]})")
+                lines.append(f"    - 날씨 상태: {info['weather']}")
+                lines.append(f"    - 기온: {info['temperature']} (체감: {info['apparent_temperature']})")
+                lines.append(f"    - 습도: {info['humidity']}")
+                lines.append(f"    - 강수확률: {info['precipitation_probability']}")
+                lines.append(f"    - 풍속: {info['wind_speed']}")
             else:
-                print(f"  [{slot_label}] 날씨 데이터를 찾을 수 없습니다.")
-    print("\n" + "=" * 45)
+                lines.append(f"  [{slot_label}] 날씨 데이터를 찾을 수 없습니다.")
+    lines.append("\n" + "=" * 45)
+    return "\n".join(lines)
+
+
+def display_weather(weather_data):
+    """조회된 날씨 정보를 콘솔에 출력합니다."""
+    print("\n" + format_weather_text(weather_data))
+
+
+def save_weather_to_file(weather_data, filename=None):
+    """
+    조회된 날씨 정보를 텍스트 파일(.txt)로 저장합니다.
+    """
+    if not filename:
+        clean_date = weather_data["days"]["오늘"]["date"].replace("-", "")
+        filename = f"weather_{weather_data['location']}_{clean_date}.txt"
+
+    content = format_weather_text(weather_data) + "\n"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return os.path.abspath(filename)
 
 
 def select_city():
@@ -191,7 +213,22 @@ def select_city():
     return user_input
 
 
+def ask_and_save(weather_data):
+    """
+    사용자에게 저장 여부를 묻고, 동의 시 파일로 저장합니다.
+    """
+    ans = input("조회된 날씨 결과를 파일(.txt)로 저장하시겠습니까? (y/n, 기본값: y): ").strip().lower()
+    if ans in ("", "y", "yes", "예", "ㅇ"):
+        saved_path = save_weather_to_file(weather_data)
+        file_name = os.path.basename(saved_path)
+        print(f"✔ 날씨 정보가 성공적으로 저장되었습니다: {file_name}")
+        print(f"  (저장 경로: {saved_path})")
+    else:
+        print("저장하지 않고 프로그램을 마칩니다.")
+
+
 if __name__ == "__main__":
     choice = select_city()
     weather_info = get_weather(choice)
     display_weather(weather_info)
+    ask_and_save(weather_info)
